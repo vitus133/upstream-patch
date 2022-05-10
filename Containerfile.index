@@ -1,0 +1,54 @@
+FROM registry.access.redhat.com/ubi8-minimal AS builder
+
+RUN mkdir -p /configs
+
+# Install tools necessary for extracting the opm binary
+RUN microdnf -y install tar gzip
+
+# Pull the latest opm binary for building the index
+RUN curl https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/opm-linux.tar.gz -o opm-linux.tar.gz  && tar -xvf opm-linux.tar.gz && cp opm /bin/
+
+# Create an icon file. This one is a blank gray square.
+RUN echo "iVBORw0KGgoAAAANSUhEUgAAAMgAAADIAQMAAACXljzdAAAAA1BMVEWAgICQdD0xAAAAG0lEQVR4Xu3AgQAAAADDoPtTX2EAtQgAAAAA4BRQAAFlkU3iAAAAAElFTkSuQmCC" | base64 -d > /tmp/gray.png
+
+# Create the index
+RUN echo "# Cluster Group Upgrades operator" > /tmp/README.md && \
+    opm init cluster-group-upgrades-operator \
+    --default-channel=preview \
+    --description=/tmp/README.md  \
+    --icon=/tmp/gray.png \
+    --output yaml > /configs/index.yaml
+
+# Add a channel
+RUN echo -e "\
+---\n\
+schema: olm.channel\n\
+package: cluster-group-upgrades-operator\n\
+name: preview\n\
+entries:\n\
+ - name: cluster-group-upgrades-operator.v4.10.0\n\
+" >> /configs/index.yaml
+
+# Add a bundle
+RUN opm render \
+    quay.io/<your quay namespace>/cluster-group-upgrades-operator-bundle:4.10.0 \
+    --output=yaml >> /configs/index.yaml
+
+# Validate the registry
+RUN opm validate /configs
+
+###########################################################
+# The base image is expected to contain
+# /bin/opm (with a serve subcommand) and /bin/grpc_health_probe
+FROM registry.redhat.io/openshift4/ose-operator-registry:v4.9
+
+# Configure the entrypoint and command
+ENTRYPOINT ["/bin/opm"]
+CMD ["serve", "/configs"]
+
+# Copy declarative config root into image at /configs
+COPY --from=builder /configs /configs
+
+# Set DC-specific label for the location of the DC root directory
+# in the image
+LABEL operators.operatorframework.io.index.configs.v1=/configs
