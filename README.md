@@ -32,7 +32,6 @@ index_img=quay.io/<your quay namespace>/ran-operator-index:4.10.0
 disconnected_reg=registry.hv6.telco5gran.eng.rdu2.redhat.com:8443
 oc adm catalog mirror $index_img $disconnected_reg --manifests-only=true --icsp-scope registry --to-manifests=my_manifests --index-filter-by-os=linux/amd64
 oc image mirror -f my_manifests/mapping.txt --keep-manifest-list
-oc patch OperatorHub cluster --type json -p '[{"op": "add", "path": "/spec/disableAllDefaultSources", "value": true}]'
 ```
 
 ## How to configure your cluster to use mirrored images ##
